@@ -7,7 +7,7 @@ import numpy as np
 modelo = joblib.load("modelo_dosagem.pkl")
 
 # Define o app
-app = FastAPI(title="API de Dosagem de Fertilizante")
+app = FastAPI(title="API de Validação FertiControl IA - Deway")
 
 # Define os dados esperados
 class FertilizanteInput(BaseModel):
