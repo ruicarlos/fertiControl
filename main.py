@@ -4,6 +4,10 @@ from pydantic import BaseModel, EmailStr
 import joblib
 import numpy as np
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+from models import Laudo
+from typing import List
+
 
 from auth import autenticar_usuario, get_db
 from models import Usuario, Empresa, Producao, Fertilizante, Sensor, Rastreio
@@ -30,6 +34,10 @@ from schemas import RastreioBase
 from schemas import RastreioCreate
 from schemas import RastreioOut
 from schemas import RastreioUpdate
+from schemas import LaudoBase
+from schemas import LaudoCreate
+from schemas import LaudoOut
+
 
 
 # Carrega o modelo treinado
@@ -121,6 +129,38 @@ def criar_producao(producao: ProducaoCreate, db: Session = Depends(get_db)):
     return db_producao
 
 
+@app.get("/producao/soma_volume_a_produzir", response_model=int)
+def soma_producao_produzir(db: Session = Depends(get_db)):
+    soma = db.query(func.coalesce(func.sum(Producao.volume), 0))\
+             .filter(Producao.status == "Produzir")\
+             .scalar()
+    return soma
+
+
+@app.get("/producao-semanal")
+def producao_semanal(db: Session = Depends(get_db)):
+    # Consulta agrupando por dia da semana
+    resultados = (
+        db.query(
+            func.dayname(Producao.data).label("dia_semana"),
+            func.sum(Producao.volume).label("total_volume")
+        )
+        .group_by(func.dayname(Producao.data))
+        .order_by(
+            func.field(
+                func.dayname(Producao.data),
+                "Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"
+            )
+        )
+        .all()
+    )
+
+    # Converte para lista de dicionários
+    return [
+        {"dia_semana": r.dia_semana, "total_volume": float(r.total_volume or 0)}
+        for r in resultados
+    ]
+
 
 @app.get("/fertilizante", response_model=List[FertilizanteOut])
 def listar_fertilizantes(db: Session = Depends(get_db)):
@@ -150,6 +190,12 @@ def criar_sensores(sensor: SensorCreate, db: Session = Depends(get_db)):
     db.refresh(db_sensor)
     return db_sensor
 
+@app.get("/sensor/soma_ativos", response_model=int)
+def soma_sensores_ativos(db: Session = Depends(get_db)):
+    soma = db.query(func.count(Sensor.id))\
+             .filter(Sensor.status == "ATIVO")\
+             .scalar()
+    return soma
 
 @app.get("/rastreio", response_model=List[RastreioOut])
 def listar_rastreio(db: Session = Depends(get_db)):
@@ -163,3 +209,29 @@ def criar_rastreio(rastreio: RastreioCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_rastreio)
     return db_rastreio
+
+
+# Criar um laudo
+@app.post("/laudos", response_model=LaudoOut)
+def criar_laudo(laudo: LaudoCreate, db: Session = Depends(get_db)):
+    db_laudo = Laudo(**laudo.dict())
+    db.add(db_laudo)
+    db.commit()
+    db.refresh(db_laudo)
+    return db_laudo
+
+# Listar todos os laudos (pode receber filtro por producao_id)
+@app.get("/laudos", response_model=List[LaudoOut])
+def listar_laudos(producao_id: Optional[int] = None, db: Session = Depends(get_db)):
+    query = db.query(Laudo)
+    if producao_id:
+        query = query.filter(Laudo.producao_id == producao_id)
+    return query.order_by(Laudo.data_criacao.desc()).all()
+
+# Obter um laudo específico por id
+@app.get("/laudos/{laudo_id}", response_model=LaudoOut)
+def obter_laudo(laudo_id: int, db: Session = Depends(get_db)):
+    laudo = db.query(Laudo).filter(Laudo.id == laudo_id).first()
+    if not laudo:
+        raise HTTPException(status_code=404, detail="Laudo não encontrado")
+    return laudo

@@ -1,6 +1,8 @@
 # models.py
-from sqlalchemy import Column, Integer, String, Boolean, TIMESTAMP, Float, Date, Text
+from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, TIMESTAMP, Float, Date, Text
 from database import Base
+
+
 
 # Modelo existente
 class Usuario(Base):
@@ -42,6 +44,9 @@ class Producao(Base):
     sn = Column(Float, nullable=False)
     sp = Column(Float, nullable=False)
     sk = Column(Float, nullable=False)
+    amonia = Column(String(20), nullable=True)
+    fosfato = Column(String(20), nullable=True)
+    potassio = Column(String(20), nullable=True)
 
 
 # Modelo Fertilizante
@@ -77,3 +82,12 @@ class Rastreio(Base):
     data = Column(Date, nullable=True)
     hora = Column(String(15), nullable=True)
     status = Column(String(10), nullable=False)
+
+# Modelo Laudo
+class Laudo(Base):
+    __tablename__ = "laudos"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    producao_id = Column(Integer, ForeignKey("producao.id"), nullable=True)
+    tipo = Column(String(50))  # ex: dosagem, monitoramento, conformidade
+    texto = Column(Text)
+    data_criacao = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP")

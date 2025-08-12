@@ -53,6 +53,9 @@ class ProducaoBase(BaseModel):
     sn: float
     sp: float
     sk: float
+    amonia: str
+    fosfato: str
+    potassio: str
 
 class ProducaoCreate(ProducaoBase):
     pass
@@ -67,6 +70,9 @@ class ProducaoUpdate(BaseModel):
     sn: Optional[float] = None
     sp: Optional[float] = None
     sk: Optional[float] = None
+    amonia: Optional[str] = None
+    fosfato: Optional[str] = None
+    potassio: Optional[str] = None
 
 class ProducaoOut(ProducaoBase):
     id: int
@@ -144,3 +150,19 @@ class RastreioOut(RastreioBase):
 
     class Config:
         from_attributes = True
+
+
+class LaudoBase(BaseModel):
+    tipo: str
+    texto: str
+    producao_id: Optional[int] = None
+
+class LaudoCreate(LaudoBase):
+    pass
+
+class LaudoOut(LaudoBase):
+    id: int
+    data_criacao: datetime
+
+    class Config:
+       from_attributes = True
