@@ -12,6 +12,7 @@ from typing import List
 from auth import autenticar_usuario, get_db
 from models import Usuario, Empresa, Producao, Fertilizante, Sensor, Rastreio
 from schemas import UsuarioLogin
+from schemas import UsuarioOut
 from typing import List, Optional
 from datetime import datetime
 from schemas import EmpresaOut
@@ -63,10 +64,11 @@ app.add_middleware(
 )
 
 # Login
-@app.post("/login")
+@app.post("/login", response_model=UsuarioOut)
 def login(dados: UsuarioLogin, db: Session = Depends(get_db)):
     usuario = autenticar_usuario(dados.username, dados.senha, db)
-    return {"mensagem": f"Usuário {usuario.username} autenticado com sucesso."}
+    return usuario
+
 
 # Rota protegida
 @app.post("/prever_dosagem")

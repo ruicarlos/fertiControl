@@ -11,6 +11,8 @@ class Usuario(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True)
     senha_hash = Column(String(255))
+    name = Column(String(100)) 
+    role = Column(String(50), default="user")
 
 # Novo modelo Empresa
 class Empresa(Base):

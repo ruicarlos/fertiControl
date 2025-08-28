@@ -7,6 +7,16 @@ class UsuarioLogin(BaseModel):
     username: str
     senha: str
 
+class UsuarioOut(BaseModel):
+    id: int
+    username: str
+    name: str
+    role: str
+
+    class Config:
+        from_attributes = True
+
+        
 class EmpresaBase(BaseModel):
     cnpj: str
     nome_empresa: str
