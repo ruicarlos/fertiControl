@@ -12,6 +12,7 @@ class UsuarioOut(BaseModel):
     username: str
     name: str
     role: str
+    empresa: Optional[int] = None
 
     class Config:
         from_attributes = True
