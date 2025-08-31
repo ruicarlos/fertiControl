@@ -2,24 +2,11 @@
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, TIMESTAMP, Float, Date, Text
 from database import Base
 
-
-
-# Modelo existente
-class Usuario(Base):
-    __tablename__ = "usuarios"
-
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(50), unique=True, index=True)
-    senha_hash = Column(String(255))
-    name = Column(String(100)) 
-    role = Column(String(50), default="user")
-    empresa = Column(Integer, ForeignKey("empresas.id"), nullable=True)
-
-# Novo modelo Empresa
+# Modelo Empresa (Não muda)
 class Empresa(Base):
     __tablename__ = "empresas"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
+    # ... (demais campos da empresa)
     data_criacao = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP")
     cnpj = Column(String(18), unique=True, nullable=False)
     nome_empresa = Column(String(255), nullable=False)
@@ -32,11 +19,19 @@ class Empresa(Base):
     responsavel_email = Column(String(255), nullable=False)
     ativo = Column(Boolean, nullable=False, default=True)
 
+# Modelo Usuario (Já está correto)
+class Usuario(Base):
+    __tablename__ = "usuarios"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, index=True)
+    senha_hash = Column(String(255))
+    name = Column(String(100)) 
+    role = Column(String(50), default="user")
+    empresa = Column(Integer, ForeignKey("empresas.id"), nullable=True)
 
 # Modelo Producao
 class Producao(Base):
     __tablename__ = "producao"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     tipo = Column(String(250), nullable=False)
     volume = Column(Float, nullable=False)
@@ -50,33 +45,30 @@ class Producao(Base):
     amonia = Column(String(20), nullable=True)
     fosfato = Column(String(20), nullable=True)
     potassio = Column(String(20), nullable=True)
-
+    empresa = Column(Integer, ForeignKey("empresas.id")) # <-- ADICIONADO
 
 # Modelo Fertilizante
 class Fertilizante(Base):
     __tablename__ = "fertilizante"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     fertilizante = Column(String(25), nullable=False)
     n = Column(Integer, nullable=False)
     p = Column(Integer, nullable=False)
     k = Column(Integer, nullable=False)
-
+    empresa = Column(Integer, ForeignKey("empresas.id")) # <-- ADICIONADO
 
 # Modelo Sensor
 class Sensor(Base):
     __tablename__ = "sensor"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     sensor = Column(String(25), nullable=False)
     device = Column(String(25), nullable=False)
     status = Column(String(10), nullable=False)
-
+    empresa = Column(Integer, ForeignKey("empresas.id")) # <-- ADICIONADO
 
 # Modelo Rastreio
 class Rastreio(Base):
     __tablename__ = "rastreio"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     producao = Column(Integer)
     sensor = Column(String(15), nullable=True)
@@ -85,12 +77,14 @@ class Rastreio(Base):
     data = Column(Date, nullable=True)
     hora = Column(String(15), nullable=True)
     status = Column(String(10), nullable=False)
+    empresa = Column(Integer, ForeignKey("empresas.id")) # <-- ADICIONADO
 
 # Modelo Laudo
 class Laudo(Base):
     __tablename__ = "laudos"
     id = Column(Integer, primary_key=True, autoincrement=True)
     producao_id = Column(Integer, ForeignKey("producao.id"), nullable=True)
-    tipo = Column(String(50))  # ex: dosagem, monitoramento, conformidade
+    tipo = Column(String(50))
     texto = Column(Text)
     data_criacao = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP")
+    empresa = Column(Integer, ForeignKey("empresas.id")) # <-- ADICIONADO
