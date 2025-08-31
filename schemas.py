@@ -66,6 +66,7 @@ class ProducaoBase(BaseModel):
     amonia: str
     fosfato: str
     potassio: str
+    empresa: int 
 
 class ProducaoCreate(ProducaoBase):
     pass
@@ -96,6 +97,7 @@ class FertilizanteBase(BaseModel):
     n: int
     p: int
     k: int
+    empresa: int
 
 class FertilizanteCreate(FertilizanteBase):
     pass
@@ -116,7 +118,8 @@ class FertilizanteOut(FertilizanteBase):
 class SensorBase(BaseModel):
     sensor: str
     device: str
-    status: str    
+    status: str  
+    empresa: int  
 
 class SensorCreate(SensorBase):
     pass
@@ -142,6 +145,7 @@ class RastreioBase(BaseModel):
     data: date
     hora: str
     status: str    
+    empresa: int
 
 class RastreioCreate(RastreioBase):
     pass
@@ -166,6 +170,7 @@ class LaudoBase(BaseModel):
     tipo: str
     texto: str
     producao_id: Optional[int] = None
+    empresa: int
 
 class LaudoCreate(LaudoBase):
     pass
