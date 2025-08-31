@@ -79,6 +79,16 @@ def listar_empresas(db: Session = Depends(get_db)):
     # Esta rota geralmente é para administradores, então mantemos sem filtro.
     return db.query(Empresa).all()
 
+
+@app.get("/empresas/{empresa_id}", response_model=EmpresaOut)
+def obter_empresa(empresa_id: int, db: Session = Depends(get_db)):
+    """
+    Obtém os detalhes de uma empresa específica pelo seu ID.
+    """
+    empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+    return empresa
 # --- Predição ---
 
 @app.post("/prever_dosagem")
