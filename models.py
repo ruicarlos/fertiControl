@@ -13,6 +13,7 @@ class Usuario(Base):
     senha_hash = Column(String(255))
     name = Column(String(100)) 
     role = Column(String(50), default="user")
+    empresa = Column(Integer, ForeignKey("empresas.id"), nullable=True)
 
 # Novo modelo Empresa
 class Empresa(Base):

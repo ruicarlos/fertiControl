@@ -95,11 +95,30 @@ def listar_empresas(db: Session = Depends(get_db)):
 
 @app.post("/empresas", response_model=EmpresaOut)
 def criar_empresa(empresa: EmpresaCreate, db: Session = Depends(get_db)):
+    # Verifica se já existe um usuário com o e-mail do responsável
+    usuario_existente = db.query(Usuario).filter(Usuario.username == empresa.responsavel_email).first()
+    if usuario_existente:
+        raise HTTPException(status_code=400, detail="O e-mail do responsável já está em uso.")
+
+    # Cria a empresa
     db_empresa = Empresa(**empresa.dict())
     db.add(db_empresa)
     db.commit()
     db.refresh(db_empresa)
+
+    # Cria o usuário associado à empresa
+    novo_usuario = Usuario(
+        username=empresa.responsavel_email,
+        name=empresa.responsavel_nome,
+        senha_hash='$2b$12$RnK.cn1LVyaqrbCnfhaUw.1l7FRHRTD8LotahOUYPTvzyA7VZz8Pe', # Senha hash padrão
+        role='client', # Role padrão
+        empresa=db_empresa.id # Vincula o usuário à empresa criada
+    )
+    db.add(novo_usuario)
+    db.commit()
+
     return db_empresa
+
 
 @app.patch("/empresas/{empresa_id}", response_model=EmpresaOut)
 def atualizar_empresa(empresa_id: int, updates: EmpresaUpdate, db: Session = Depends(get_db)):
