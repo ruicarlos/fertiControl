@@ -1,9 +1,3 @@
-# main.py
-
-# ⚠️ AVISO DE SEGURANÇA: Esta implementação não valida o usuário em cada
-# endpoint. Dados podem ser acessados ou criados para qualquer empresa se o
-# 'empresa_id' for conhecido. Considere adicionar uma camada de segurança (ex: token)
-# em um ambiente de produção.
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
