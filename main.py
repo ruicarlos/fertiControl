@@ -338,6 +338,37 @@ def obter_ultimos_dados_grafico(empresa_id: int, db: Session = Depends(get_db)):
              .order_by(IndicadorDashboard.data.desc())\
              .first()
 
+# Adicione esta função em main.py, na seção de Produção
+
+@app.get("/producao/media_conformidade", response_model=float)
+def obter_media_conformidade(empresa_id: int, db: Session = Depends(get_db)):
+    """
+    Calcula a porcentagem de produções concluídas que estão em conformidade.
+    A conformidade é definida pelo campo 'laudo' sendo igual a 'Conforme'.
+    """
+    # Conta todas as produções que foram concluídas para a empresa
+    total_concluidas = db.query(Producao).filter(
+        Producao.empresa == empresa_id,
+        Producao.status == 'Concluído'
+    ).count()
+
+    # Se não houver produções concluídas, a conformidade é 0 para evitar divisão por zero
+    if total_concluidas == 0:
+        return 0.0
+
+    # Conta as produções concluídas que têm o laudo "Conforme"
+    total_conforme = db.query(Producao).filter(
+        Producao.empresa == empresa_id,
+        Producao.status == 'Concluído',
+        Producao.laudo == 'Conforme'
+    ).count()
+
+    # Calcula a porcentagem
+    media = (total_conforme / total_concluidas) * 100
+    
+    return round(media, 2)
+
+    
 # --- Entry point ---
 if __name__ == "__main__":
     import uvicorn
