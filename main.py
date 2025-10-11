@@ -1,19 +1,24 @@
-
-from fastapi import FastAPI, Depends, HTTPException
+# main.py
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles # <-- IMPORT CORRIGIDO
 from pydantic import BaseModel, EmailStr
 import joblib
+import os
 import numpy as np
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
+import uuid # <-- IMPORT ADICIONADO
+from datetime import date # <-- IMPORT ADICIONADO
 
 from auth import autenticar_usuario, get_db
-from models import Usuario, Empresa, Producao, Fertilizante, Sensor, Rastreio, Laudo
+from models import Usuario, Empresa, Producao, Fertilizante, Sensor, Rastreio, Laudo, IndicadorDashboard 
 from schemas import (
     UsuarioLogin, UsuarioOut, EmpresaCreate, EmpresaOut, EmpresaUpdate, ProducaoCreate,
-    ProducaoOut, FertilizanteCreate, FertilizanteOut, SensorCreate, SensorOut,
-    RastreioCreate, RastreioOut, LaudoCreate, LaudoOut
+    ProducaoOut, FertilizanteCreate, FertilizanteOut, SensorOut,
+    RastreioCreate, RastreioOut, LaudoCreate, LaudoOut, IndicadorDashboardCreate, 
+    IndicadorDashboardOut
 )
 
 # Carrega o modelo treinado
@@ -22,12 +27,7 @@ modelo = joblib.load("modelo_dosagem.pkl")
 # Define o app
 app = FastAPI(title="API de Validação FertiControl IA - Deway")
 
-# Modelo de entrada
-class FertilizanteInput(BaseModel):
-    N: int
-    P: int
-    K: int
-    volume: float
+# --- Configuração de CORS e Arquivos Estáticos ---
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,6 +36,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Cria o diretório para salvar as imagens dos sensores, se não existir
+os.makedirs("static/sensor_images", exist_ok=True)
+# Monta o diretório 'static' para ser acessível via /static na URL
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+# Modelo de entrada para predição
+class FertilizanteInput(BaseModel):
+    N: int
+    P: int
+    K: int
+    volume: float
 
 # --- Autenticação e Empresa ---
 
@@ -49,7 +62,6 @@ def login(dados: UsuarioLogin, db: Session = Depends(get_db)):
 
 @app.post("/empresas", response_model=EmpresaOut)
 def criar_empresa(empresa: EmpresaCreate, db: Session = Depends(get_db)):
-    # ... (código mantido, já está correto)
     usuario_existente = db.query(Usuario).filter(Usuario.username == empresa.responsavel_email).first()
     if usuario_existente:
         raise HTTPException(status_code=400, detail="O e-mail do responsável já está em uso.")
@@ -70,7 +82,6 @@ def criar_empresa(empresa: EmpresaCreate, db: Session = Depends(get_db)):
 
 @app.get("/empresas", response_model=List[EmpresaOut])
 def listar_empresas(db: Session = Depends(get_db)):
-    # Esta rota geralmente é para administradores, então mantemos sem filtro.
     return db.query(Empresa).all()
 
 
@@ -83,11 +94,11 @@ def obter_empresa(empresa_id: int, db: Session = Depends(get_db)):
     if not empresa:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
     return empresa
+
 # --- Predição ---
 
 @app.post("/prever_dosagem")
 def prever_dosagem(dados: FertilizanteInput, db: Session = Depends(get_db)):
-    # A autenticação insegura foi removida. Esta rota agora é pública.
     entrada = np.array([[dados.N, dados.P, dados.K, dados.volume]])
     pred = modelo.predict(entrada)[0]
     return {
@@ -105,7 +116,6 @@ def listar_producoes(empresa_id: int, db: Session = Depends(get_db)):
 
 @app.post("/producao", response_model=ProducaoOut)
 def criar_producao(producao: ProducaoCreate, db: Session = Depends(get_db)):
-    """Cria uma nova produção (o 'empresa_id' deve vir no corpo da requisição)."""
     db_producao = Producao(**producao.dict())
     db.add(db_producao)
     db.commit()
@@ -114,7 +124,6 @@ def criar_producao(producao: ProducaoCreate, db: Session = Depends(get_db)):
 
 @app.get("/producao/soma_volume_a_produzir", response_model=float)
 def soma_producao_produzir(empresa_id: int, db: Session = Depends(get_db)):
-    """Soma o volume a produzir para uma empresa específica."""
     soma = db.query(func.coalesce(func.sum(Producao.volume), 0.0))\
              .filter(Producao.status == "Produzir", Producao.empresa == empresa_id)\
              .scalar()
@@ -122,7 +131,6 @@ def soma_producao_produzir(empresa_id: int, db: Session = Depends(get_db)):
 
 @app.get("/producao-semanal")
 def producao_semanal(empresa_id: int, db: Session = Depends(get_db)):
-    """Retorna a produção semanal para uma empresa específica."""
     resultados = (
         db.query(
             func.dayname(Producao.data).label("dia_semana"),
@@ -138,12 +146,10 @@ def producao_semanal(empresa_id: int, db: Session = Depends(get_db)):
 
 @app.get("/fertilizante", response_model=List[FertilizanteOut])
 def listar_fertilizantes(empresa_id: int, db: Session = Depends(get_db)):
-    """Lista os fertilizantes de uma empresa específica."""
     return db.query(Fertilizante).filter(Fertilizante.empresa == empresa_id).all()
 
 @app.post("/fertilizante", response_model=FertilizanteOut)
 def criar_tipo_fertilizante(fertilizante: FertilizanteCreate, db: Session = Depends(get_db)):
-    """Cria um novo fertilizante (o 'empresa_id' deve vir no corpo da requisição)."""
     db_fertilizante = Fertilizante(**fertilizante.dict())
     db.add(db_fertilizante)
     db.commit()
@@ -154,21 +160,43 @@ def criar_tipo_fertilizante(fertilizante: FertilizanteCreate, db: Session = Depe
 
 @app.get("/sensor", response_model=List[SensorOut])
 def listar_sensores(empresa_id: int, db: Session = Depends(get_db)):
-    """Lista os sensores de uma empresa específica."""
     return db.query(Sensor).filter(Sensor.empresa == empresa_id).all()
 
 @app.post("/sensor", response_model=SensorOut)
-def criar_sensores(sensor: SensorCreate, db: Session = Depends(get_db)):
-    """Cria um novo sensor (o 'empresa_id' deve vir no corpo da requisição)."""
-    db_sensor = Sensor(**sensor.dict())
+async def criar_sensores(
+    db: Session = Depends(get_db),
+    sensor: str = Form(...),
+    device: str = Form(...),
+    status: str = Form(...),
+    empresa: int = Form(...),
+    imagem: Optional[UploadFile] = File(None)
+):
+    imagem_url = None
+    if imagem:
+        file_extension = imagem.filename.split('.')[-1]
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        file_path = f"static/sensor_images/{unique_filename}"
+        
+        with open(file_path, "wb") as buffer:
+            buffer.write(await imagem.read())
+        
+        imagem_url = f"/{file_path}"
+
+    db_sensor = Sensor(
+        sensor=sensor,
+        device=device,
+        status=status,
+        empresa=empresa,
+        imagem_url=imagem_url
+    )
     db.add(db_sensor)
     db.commit()
     db.refresh(db_sensor)
     return db_sensor
 
+
 @app.get("/sensor/soma_ativos", response_model=int)
 def soma_sensores_ativos(empresa_id: int, db: Session = Depends(get_db)):
-    """Conta os sensores ativos de uma empresa específica."""
     soma = db.query(func.count(Sensor.id))\
              .filter(Sensor.status == "ATIVO", Sensor.empresa == empresa_id)\
              .scalar()
@@ -178,12 +206,10 @@ def soma_sensores_ativos(empresa_id: int, db: Session = Depends(get_db)):
 
 @app.get("/rastreio", response_model=List[RastreioOut])
 def listar_rastreio(empresa_id: int, db: Session = Depends(get_db)):
-    """Lista os registros de rastreio de uma empresa específica."""
     return db.query(Rastreio).filter(Rastreio.empresa == empresa_id).all()
 
 @app.post("/rastreio", response_model=RastreioOut)
 def criar_rastreio(rastreio: RastreioCreate, db: Session = Depends(get_db)):
-    """Cria um novo registro de rastreio (o 'empresa_id' deve vir no corpo da requisição)."""
     db_rastreio = Rastreio(**rastreio.dict())
     db.add(db_rastreio)
     db.commit()
@@ -194,7 +220,6 @@ def criar_rastreio(rastreio: RastreioCreate, db: Session = Depends(get_db)):
 
 @app.get("/laudos", response_model=List[LaudoOut])
 def listar_laudos(empresa_id: int, producao_id: Optional[int] = None, db: Session = Depends(get_db)):
-    """Lista os laudos de uma empresa, com filtro opcional por produção."""
     query = db.query(Laudo).filter(Laudo.empresa == empresa_id)
     if producao_id:
         query = query.filter(Laudo.producao_id == producao_id)
@@ -202,7 +227,6 @@ def listar_laudos(empresa_id: int, producao_id: Optional[int] = None, db: Sessio
 
 @app.post("/laudos", response_model=LaudoOut)
 def criar_laudo(laudo: LaudoCreate, db: Session = Depends(get_db)):
-    """Cria um novo laudo (o 'empresa_id' deve vir no corpo da requisição)."""
     db_laudo = Laudo(**laudo.dict())
     db.add(db_laudo)
     db.commit()
@@ -211,15 +235,64 @@ def criar_laudo(laudo: LaudoCreate, db: Session = Depends(get_db)):
 
 @app.get("/laudos/{laudo_id}", response_model=LaudoOut)
 def obter_laudo(laudo_id: int, empresa_id: int, db: Session = Depends(get_db)):
-    """Obtém um laudo específico, verificando se pertence à empresa correta."""
     laudo = db.query(Laudo).filter(Laudo.id == laudo_id, Laudo.empresa == empresa_id).first()
     if not laudo:
         raise HTTPException(status_code=404, detail="Laudo não encontrado ou não pertence a esta empresa")
     return laudo
 
+# --- NOVAS ROTAS PARA INDICADORES DO DASHBOARD ---
+
+# ROTA CORRIGIDA para consistência com o frontend
+@app.post("/indicadores_dashboard", response_model=IndicadorDashboardOut)
+def salvar_dados_grafico(
+    dados: IndicadorDashboardCreate, db: Session = Depends(get_db)
+):
+    """
+    Salva ou atualiza os dados dos gráficos do dashboard para uma empresa em um dia específico.
+    """
+    db_indicador = db.query(IndicadorDashboard).filter(
+        IndicadorDashboard.empresa_id == dados.empresa_id,
+        IndicadorDashboard.data == dados.data
+    ).first()
+
+    if not db_indicador:
+        db_indicador = IndicadorDashboard(empresa_id=dados.empresa_id, data=dados.data)
+        db.add(db_indicador)
+
+    update_data = dados.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        if hasattr(db_indicador, key) and value is not None:
+            setattr(db_indicador, key, value)
+    
+    if db_indicador.disponibilidade is not None and db_indicador.performance is not None and db_indicador.qualidade is not None:
+        db_indicador.oee = (db_indicador.disponibilidade / 100) * (db_indicador.performance / 100) * (db_indicador.qualidade / 100) * 100
+
+    if db_indicador.tempo_produzindo is not None and db_indicador.tempo_planejado is not None and db_indicador.tempo_planejado > 0:
+        db_indicador.eficiencia_operacional = (db_indicador.tempo_produzindo / db_indicador.tempo_planejado) * 100
+
+    if db_indicador.producao_real is not None and db_indicador.horas_trabalhadas is not None and db_indicador.horas_trabalhadas > 0:
+        db_indicador.produtividade = db_indicador.producao_real / db_indicador.horas_trabalhadas
+    
+    db.commit()
+    db.refresh(db_indicador)
+    return db_indicador
+
+
+# ROTA CORRIGIDA para consistência com o frontend
+@app.get("/indicadores_dashboard/latest", response_model=Optional[IndicadorDashboardOut])
+def obter_ultimos_dados_grafico(empresa_id: int, db: Session = Depends(get_db)):
+    """
+    Retorna o último registro de dados de gráfico para uma empresa.
+    """
+    return db.query(IndicadorDashboard)\
+             .filter(IndicadorDashboard.empresa_id == empresa_id)\
+             .order_by(IndicadorDashboard.data.desc())\
+             .first()
+
 # --- Entry point ---
 if __name__ == "__main__":
-    import os
     import uvicorn
+    # O ideal é usar a string 'main:app' para que o reload funcione corretamente
+    # com o uvicorn instalado no ambiente virtual.
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

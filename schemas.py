@@ -17,7 +17,7 @@ class UsuarioOut(BaseModel):
     class Config:
         from_attributes = True
 
-        
+
 class EmpresaBase(BaseModel):
     cnpj: str
     nome_empresa: str
@@ -53,7 +53,7 @@ class EmpresaOut(EmpresaBase):
 
 
 
-# Produção
+# Produção (Não muda)
 class ProducaoBase(BaseModel):
     tipo: str
     volume: float
@@ -67,7 +67,7 @@ class ProducaoBase(BaseModel):
     amonia: str
     fosfato: str
     potassio: str
-    empresa: int 
+    empresa: int
 
 class ProducaoCreate(ProducaoBase):
     pass
@@ -92,7 +92,7 @@ class ProducaoOut(ProducaoBase):
     class Config:
         from_attributes = True
 
-# Fertilizante
+# Fertilizante (Não muda)
 class FertilizanteBase(BaseModel):
     fertilizante: str
     n: int
@@ -115,12 +115,13 @@ class FertilizanteOut(FertilizanteBase):
     class Config:
         from_attributes = True
 
-# Sensor
+# Sensor (MODIFICADO)
 class SensorBase(BaseModel):
     sensor: str
     device: str
-    status: str  
-    empresa: int  
+    status: str
+    imagem_url: Optional[str] = None # <-- NOVO CAMPO
+    empresa: int
 
 class SensorCreate(SensorBase):
     pass
@@ -129,6 +130,7 @@ class SensorUpdate(BaseModel):
     sensor: Optional[str] = None
     device: Optional[str] = None
     status: Optional[str] = None
+    # A atualização da imagem pode ser tratada em um endpoint separado se necessário
 
 class SensorOut(SensorBase):
     id: int
@@ -137,7 +139,7 @@ class SensorOut(SensorBase):
         from_attributes = True
 
 
-# Rastreio
+# Rastreio (Não muda)
 class RastreioBase(BaseModel):
     producao: int
     sensor: str
@@ -145,7 +147,7 @@ class RastreioBase(BaseModel):
     peso: float
     data: date
     hora: str
-    status: str    
+    status: str
     empresa: int
 
 class RastreioCreate(RastreioBase):
@@ -167,6 +169,7 @@ class RastreioOut(RastreioBase):
         from_attributes = True
 
 
+# Laudo (Não muda)
 class LaudoBase(BaseModel):
     tipo: str
     texto: str
@@ -182,3 +185,34 @@ class LaudoOut(LaudoBase):
 
     class Config:
        from_attributes = True
+
+
+# --- NOVOS SCHEMAS PARA O DASHBOARD ---
+
+class IndicadorDashboardBase(BaseModel):
+    # OEE
+    disponibilidade: Optional[float] = None
+    performance: Optional[float] = None
+    qualidade: Optional[float] = None
+    # Eficiência
+    tempo_produzindo: Optional[float] = None
+    tempo_planejado: Optional[float] = None
+    # Produtividade
+    producao_real: Optional[float] = None
+    horas_trabalhadas: Optional[float] = None
+
+class IndicadorDashboardCreate(IndicadorDashboardBase):
+    empresa_id: int
+    data: date
+
+class IndicadorDashboardOut(IndicadorDashboardBase):
+    id: int
+    data: date
+    empresa_id: int
+    # Campos calculados
+    oee: Optional[float] = None
+    eficiencia_operacional: Optional[float] = None
+    produtividade: Optional[float] = None
+
+    class Config:
+        from_attributes = True
