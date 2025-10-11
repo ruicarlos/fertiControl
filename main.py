@@ -195,6 +195,55 @@ async def criar_sensores(
     return db_sensor
 
 
+@app.put("/sensor/{sensor_id}", response_model=SensorOut)
+async def atualizar_sensor(
+    sensor_id: int,
+    db: Session = Depends(get_db),
+    sensor: str = Form(...),
+    device: str = Form(...),
+    status: str = Form(...),
+    empresa: int = Form(...), # Adicionado para validação
+    imagem: Optional[UploadFile] = File(None)
+):
+    """
+    Atualiza um sensor existente. Aceita dados de formulário e uma nova imagem opcional.
+    """
+    db_sensor = db.query(Sensor).filter(Sensor.id == sensor_id).first()
+    if not db_sensor:
+        raise HTTPException(status_code=404, detail="Sensor não encontrado")
+    
+    # Opcional: Validar se o sensor pertence à empresa que está editando
+    if db_sensor.empresa != empresa:
+        raise HTTPException(status_code=403, detail="Acesso não autorizado para editar este sensor")
+
+    # Atualiza os campos de texto
+    db_sensor.sensor = sensor
+    db_sensor.device = device
+    db_sensor.status = status
+
+    # Se uma nova imagem foi enviada, atualiza
+    if imagem:
+        # Opcional: Deletar a imagem antiga do servidor para não acumular lixo
+        if db_sensor.imagem_url:
+            old_image_path = db_sensor.imagem_url.lstrip('/')
+            if os.path.exists(old_image_path):
+                os.remove(old_image_path)
+        
+        # Salva a nova imagem
+        file_extension = imagem.filename.split('.')[-1]
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        file_path = f"static/sensor_images/{unique_filename}"
+        
+        with open(file_path, "wb") as buffer:
+            buffer.write(await imagem.read())
+        
+        db_sensor.imagem_url = f"/{file_path}"
+
+    db.commit()
+    db.refresh(db_sensor)
+    return db_sensor
+
+
 @app.get("/sensor/soma_ativos", response_model=int)
 def soma_sensores_ativos(empresa_id: int, db: Session = Depends(get_db)):
     soma = db.query(func.count(Sensor.id))\
