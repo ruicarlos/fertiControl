@@ -286,27 +286,33 @@ def listar_laudos(empresa_id: int, producao_id: Optional[int] = None, db: Sessio
 @app.post("/laudos", response_model=LaudoOut)
 def criar_laudo(laudo: LaudoCreate, db: Session = Depends(get_db)):
     """
-    Cria um novo laudo. Se o laudo for do tipo 'Aprovado' e estiver
-    associado a uma produção, atualiza o status e o laudo da produção.
+    Cria um novo laudo. Atualiza o status da produção associada
+    tanto para laudos Aprovados quanto Reprovados.
     """
-    # 1. Cria o novo objeto de laudo com os dados recebidos
+    # 1. Cria o novo objeto de laudo
     db_laudo = Laudo(**laudo.dict())
     db.add(db_laudo)
 
-    # 2. NOVA LÓGICA: Verifica se o laudo é de aprovação e se tem uma produção associada
-    if laudo.producao_id and laudo.tipo == 'Aprovado':
-        # Busca a produção correspondente no banco de dados
+    # --- LÓGICA ATUALIZADA ---
+    # 2. Verifica se o laudo tem uma produção associada
+    if laudo.producao_id:
         db_producao = db.query(Producao).filter(Producao.id == laudo.producao_id).first()
 
-        # Se a produção for encontrada, atualiza os campos
+        # Se a produção for encontrada, aplica as regras
         if db_producao:
+            # A produção é considerada 'Concluída' em ambos os casos, pois o processo de análise terminou.
             db_producao.status = 'Concluído'
-            db_producao.laudo = 'Conforme'
+
+            # Define o resultado do laudo na produção com base no tipo do laudo
+            if laudo.tipo == 'Aprovado':
+                db_producao.laudo = 'Conforme'
+            elif laudo.tipo == 'Reprovado':
+                db_producao.laudo = 'Rejeitado'
             
-    # 3. Salva todas as alterações (o novo laudo e a atualização da produção) em uma única transação
+    # 3. Salva todas as alterações (o novo laudo e a atualização da produção)
     db.commit()
     
-    # 4. Atualiza o objeto do laudo com os dados do banco (como o ID gerado)
+    # 4. Atualiza o objeto do laudo com os dados do banco
     db.refresh(db_laudo)
     
     return db_laudo
