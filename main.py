@@ -434,10 +434,11 @@ def obter_media_conformidade(empresa_id: int, db: Session = Depends(get_db)):
 
 
 # --- 2. ADICIONE A NOVA FUNÇÃO DE SIMULAÇÃO (Pode ser antes da rota criar_producao) ---
-
+# SUBSTITUA A SUA FUNÇÃO ANTIGA POR ESTA VERSÃO OTIMIZADA
 def iniciar_simulacao_dosagem(producao_id: int):
     """
-    Função que roda em segundo plano para simular a dosagem incremental.
+    Simula o processo de dosagem de forma mais rápida e utilizando os
+    nomes dos sensores cadastrados no banco de dados para a empresa.
     """
     print(f"--- Iniciando simulação de dosagem para Produção ID: {producao_id} ---")
     
@@ -450,33 +451,57 @@ def iniciar_simulacao_dosagem(producao_id: int):
             print(f"[ERRO] Produção ID {producao_id} não encontrada.")
             return
 
-        # Mapeia os sensores aos valores esperados da produção (sk=Potássio, sn=Nitrogênio, sp=Fosfato)
-        quantidades_esperadas = {
-            "DOSADOR4": db_producao.sk,   # Potássio
-            "S2": db_producao.sn,         # Nitrogênio / Amônia
-            "DOSADOR6": db_producao.sp    # Fosfato
+        # --- MUDANÇA 1: BUSCAR SENSORES REAIS DO BANCO DE DADOS ---
+        # Busca os nomes dos sensores cadastrados para a empresa desta produção.
+        sensores_da_empresa = db.query(Sensor.sensor).filter(Sensor.empresa == db_producao.empresa).all()
+        
+        # Extrai os nomes da lista de tuplas retornada pela query
+        lista_nomes_sensores = [s[0] for s in sensores_da_empresa]
+
+        if not lista_nomes_sensores:
+            print(f"[ERRO] Nenhum sensor cadastrado para a empresa ID {db_producao.empresa}. Abortando simulação.")
+            db_producao.status = 'Falhou' # Atualiza o status para indicar o erro
+            db.commit()
+            return
+            
+        # Mapeia dinamicamente os sensores aos valores de Nitrogênio, Fosfato e Potássio.
+        # Usa o operador de módulo (%) para evitar erros caso haja menos de 3 sensores.
+        sensor_n = lista_nomes_sensores[0]
+        sensor_p = lista_nomes_sensores[1 % len(lista_nomes_sensores)]
+        sensor_k = lista_nomes_sensores[2 % len(lista_nomes_sensores)]
+
+        dosagens_a_simular = {
+            sensor_n: db_producao.sn,      # Nitrogênio / Amônia
+            sensor_p: db_producao.sp,      # Fosfato
+            sensor_k: db_producao.sk       # Potássio
         }
         
-        # Itera sobre cada sensor/insumo para simular a dosagem
-        for sensor, quantidade_final in quantidades_esperadas.items():
-            peso_atual = 0.0
-            print(f"[{sensor}] Inciando dosagem. Meta: {quantidade_final:.2f}g")
+        # --- MUDANÇA 2: SIMULAÇÃO MAIS RÁPIDA E BASEADA EM PASSOS ---
+        num_passos = 8 # Define um número fixo de passos para a simulação
 
-            # Loop que adiciona peso incrementalmente até atingir a meta
-            while peso_atual < quantidade_final:
-                # Simula um incremento de peso (vazão do dosador)
-                incremento = random.uniform(50.0, 250.0)
-                peso_atual += incremento
+        # Itera sobre cada sensor/insumo para simular a dosagem
+        for sensor_nome, quantidade_final in dosagens_a_simular.items():
+            # Pula a simulação para este nutriente se a quantidade for zero
+            if quantidade_final <= 0:
+                print(f"[{sensor_nome}] Quantidade é 0. Pulando dosagem.")
+                continue
+
+            print(f"[{sensor_nome}] Iniciando dosagem. Meta: {quantidade_final:.2f}g")
+
+            # Loop que executa um número fixo de passos, tornando a duração previsível
+            for passo in range(1, num_passos + 1):
+                # Calcula o peso atual proporcionalmente ao passo atual
+                peso_atual = (quantidade_final / num_passos) * passo
                 
-                # Garante que o peso não ultrapasse a meta final
-                peso_atual = min(peso_atual, quantidade_final)
+                # Garante que o peso não ultrapasse a meta final e arredonda
+                peso_atual = round(min(peso_atual, quantidade_final), 2)
 
                 # Cria o payload para a tabela de rastreio
                 payload_rastreio = {
                     "producao": producao_id,
-                    "sensor": sensor,
+                    "sensor": sensor_nome, # <-- Usa o nome do sensor real
                     "quantidade": quantidade_final,
-                    "peso": round(peso_atual, 2),
+                    "peso": peso_atual,
                     "data": datetime.now().date(),
                     "hora": datetime.now().strftime("%H:%M:%S"),
                     "status": "Dosando",
@@ -488,12 +513,12 @@ def iniciar_simulacao_dosagem(producao_id: int):
                 db.add(novo_rastreio)
                 db.commit()
                 
-                print(f"[{sensor}] Peso atual: {peso_atual:.2f}g / {quantidade_final:.2f}g")
+                print(f"[{sensor_nome}] Passo {passo}/{num_passos} - Peso atual: {peso_atual:.2f}g")
 
-                # Pausa de 1 segundo para simular o tempo entre as leituras
-                time.sleep(1)
+                # Pausa menor para uma simulação mais rápida
+                time.sleep(0.2) # <-- Reduzido de 1s para 0.2s
 
-            print(f"[{sensor}] Dosagem finalizada.")
+            print(f"[{sensor_nome}] Dosagem finalizada.")
         
         # Ao final de todas as dosagens, atualiza o status da produção
         db_producao.status = 'Em Análise' # Próxima etapa do processo
@@ -501,6 +526,13 @@ def iniciar_simulacao_dosagem(producao_id: int):
         
         print(f"--- Simulação finalizada. Produção ID {producao_id} atualizada para 'Em Análise' ---")
 
+    except Exception as e:
+        print(f"[ERRO GERAL] Ocorreu um erro durante a simulação para a produção ID {producao_id}: {e}")
+        # Tenta reverter o status da produção em caso de falha inesperada
+        db_producao = db.query(Producao).filter(Producao.id == producao_id).first()
+        if db_producao:
+            db_producao.status = 'Falhou'
+            db.commit()
     finally:
         db.close()
 
