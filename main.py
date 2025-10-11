@@ -1,7 +1,7 @@
 # main.py
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles # <-- IMPORT CORRIGIDO
+from fastapi.staticfiles import StaticFiles 
 from pydantic import BaseModel, EmailStr
 import joblib
 import os
@@ -9,8 +9,11 @@ import numpy as np
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-import uuid # <-- IMPORT ADICIONADO
-from datetime import date # <-- IMPORT ADICIONADO
+import uuid 
+from datetime import date 
+import time 
+import random 
+from database import SessionLocal 
 
 from auth import autenticar_usuario, get_db
 from models import Usuario, Empresa, Producao, Fertilizante, Sensor, Rastreio, Laudo, IndicadorDashboard 
@@ -114,12 +117,32 @@ def listar_producoes(empresa_id: int, db: Session = Depends(get_db)):
     """Lista todas as produções de uma empresa específica."""
     return db.query(Producao).filter(Producao.empresa == empresa_id).all()
 
+#@app.post("/producao", response_model=ProducaoOut)
+#def criar_producao(producao: ProducaoCreate, db: Session = Depends(get_db)):
+#    db_producao = Producao(**producao.dict())
+#    db.add(db_producao)
+#    db.commit()
+#    db.refresh(db_producao)
+#    return db_producao
+
+# --- 3. MODIFIQUE A ROTA DE CRIAÇÃO DE PRODUÇÃO ---
+
+# Encontre sua função @app.post("/producao") e a substitua por esta
 @app.post("/producao", response_model=ProducaoOut)
-def criar_producao(producao: ProducaoCreate, db: Session = Depends(get_db)):
+def criar_producao(producao: ProducaoCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Cria uma nova produção. Se o status for 'Produzir',
+    inicia a simulação de dosagem em segundo plano.
+    """
     db_producao = Producao(**producao.dict())
     db.add(db_producao)
     db.commit()
     db.refresh(db_producao)
+    
+    # Se a produção for criada com o status "Produzir", adiciona a tarefa de simulação
+    if producao.status == 'Produzir':
+        background_tasks.add_task(iniciar_simulacao_dosagem, db_producao.id)
+        
     return db_producao
 
 @app.get("/producao/soma_volume_a_produzir", response_model=float)
@@ -409,6 +432,77 @@ def obter_media_conformidade(empresa_id: int, db: Session = Depends(get_db)):
     
     return round(media, 2)
 
+
+# --- 2. ADICIONE A NOVA FUNÇÃO DE SIMULAÇÃO (Pode ser antes da rota criar_producao) ---
+
+def iniciar_simulacao_dosagem(producao_id: int):
+    """
+    Função que roda em segundo plano para simular a dosagem incremental.
+    """
+    print(f"--- Iniciando simulação de dosagem para Produção ID: {producao_id} ---")
+    
+    # Cria uma nova sessão de DB exclusiva para esta tarefa
+    db = SessionLocal()
+    try:
+        # Busca os dados da produção que será simulada
+        db_producao = db.query(Producao).filter(Producao.id == producao_id).first()
+        if not db_producao:
+            print(f"[ERRO] Produção ID {producao_id} não encontrada.")
+            return
+
+        # Mapeia os sensores aos valores esperados da produção (sk=Potássio, sn=Nitrogênio, sp=Fosfato)
+        quantidades_esperadas = {
+            "DOSADOR4": db_producao.sk,   # Potássio
+            "S2": db_producao.sn,         # Nitrogênio / Amônia
+            "DOSADOR6": db_producao.sp    # Fosfato
+        }
+        
+        # Itera sobre cada sensor/insumo para simular a dosagem
+        for sensor, quantidade_final in quantidades_esperadas.items():
+            peso_atual = 0.0
+            print(f"[{sensor}] Inciando dosagem. Meta: {quantidade_final:.2f}g")
+
+            # Loop que adiciona peso incrementalmente até atingir a meta
+            while peso_atual < quantidade_final:
+                # Simula um incremento de peso (vazão do dosador)
+                incremento = random.uniform(50.0, 250.0)
+                peso_atual += incremento
+                
+                # Garante que o peso não ultrapasse a meta final
+                peso_atual = min(peso_atual, quantidade_final)
+
+                # Cria o payload para a tabela de rastreio
+                payload_rastreio = {
+                    "producao": producao_id,
+                    "sensor": sensor,
+                    "quantidade": quantidade_final,
+                    "peso": round(peso_atual, 2),
+                    "data": datetime.now().date(),
+                    "hora": datetime.now().strftime("%H:%M:%S"),
+                    "status": "Dosando",
+                    "empresa": db_producao.empresa
+                }
+                
+                # Cria e salva o registro de rastreio diretamente no banco
+                novo_rastreio = Rastreio(**payload_rastreio)
+                db.add(novo_rastreio)
+                db.commit()
+                
+                print(f"[{sensor}] Peso atual: {peso_atual:.2f}g / {quantidade_final:.2f}g")
+
+                # Pausa de 1 segundo para simular o tempo entre as leituras
+                time.sleep(1)
+
+            print(f"[{sensor}] Dosagem finalizada.")
+        
+        # Ao final de todas as dosagens, atualiza o status da produção
+        db_producao.status = 'Em Análise' # Próxima etapa do processo
+        db.commit()
+        
+        print(f"--- Simulação finalizada. Produção ID {producao_id} atualizada para 'Em Análise' ---")
+
+    finally:
+        db.close()
 
 # --- Entry point ---
 if __name__ == "__main__":
