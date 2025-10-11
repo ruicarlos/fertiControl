@@ -273,14 +273,49 @@ def listar_laudos(empresa_id: int, producao_id: Optional[int] = None, db: Sessio
     if producao_id:
         query = query.filter(Laudo.producao_id == producao_id)
     return query.order_by(Laudo.data_criacao.desc()).all()
+#
+#@app.post("/laudos", response_model=LaudoOut)
+#def criar_laudo(laudo: LaudoCreate, db: Session = Depends(get_db)):
+#    db_laudo = Laudo(**laudo.dict())
+#    db.add(db_laudo)
+#    db.commit()
+#    db.refresh(db_laudo)
+#    return db_laudo
+
 
 @app.post("/laudos", response_model=LaudoOut)
 def criar_laudo(laudo: LaudoCreate, db: Session = Depends(get_db)):
+    """
+    Cria um novo laudo. Se o laudo for do tipo 'Aprovado' e estiver
+    associado a uma produção, atualiza o status e o laudo da produção.
+    """
+    # 1. Cria o novo objeto de laudo com os dados recebidos
     db_laudo = Laudo(**laudo.dict())
     db.add(db_laudo)
+
+    # 2. NOVA LÓGICA: Verifica se o laudo é de aprovação e se tem uma produção associada
+    if laudo.producao_id and laudo.tipo == 'Aprovado':
+        # Busca a produção correspondente no banco de dados
+        db_producao = db.query(Producao).filter(Producao.id == laudo.producao_id).first()
+
+        # Se a produção for encontrada, atualiza os campos
+        if db_producao:
+            db_producao.status = 'Concluído'
+            db_producao.laudo = 'Conforme'
+            
+    # 3. Salva todas as alterações (o novo laudo e a atualização da produção) em uma única transação
     db.commit()
+    
+    # 4. Atualiza o objeto do laudo com os dados do banco (como o ID gerado)
     db.refresh(db_laudo)
+    
     return db_laudo
+
+
+
+
+
+
 
 @app.get("/laudos/{laudo_id}", response_model=LaudoOut)
 def obter_laudo(laudo_id: int, empresa_id: int, db: Session = Depends(get_db)):
@@ -368,7 +403,7 @@ def obter_media_conformidade(empresa_id: int, db: Session = Depends(get_db)):
     
     return round(media, 2)
 
-    
+
 # --- Entry point ---
 if __name__ == "__main__":
     import uvicorn
