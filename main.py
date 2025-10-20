@@ -1,7 +1,7 @@
 # main.py
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles 
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr
 import joblib
 import os
@@ -9,18 +9,18 @@ import numpy as np
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-import uuid 
+import uuid
 from datetime import date, datetime
-import time 
-import random 
-from database import SessionLocal 
+import time
+import random
+from database import SessionLocal
 
 from auth import autenticar_usuario, get_db
-from models import Usuario, Empresa, Producao, Fertilizante, Sensor, Rastreio, Laudo, IndicadorDashboard 
+from models import Usuario, Empresa, Producao, Fertilizante, Sensor, Rastreio, Laudo, IndicadorDashboard
 from schemas import (
     UsuarioLogin, UsuarioOut, EmpresaCreate, EmpresaOut, EmpresaUpdate, ProducaoCreate,
     ProducaoOut, FertilizanteCreate, FertilizanteOut, SensorOut,
-    RastreioCreate, RastreioOut, LaudoCreate, LaudoOut, IndicadorDashboardCreate, 
+    RastreioCreate, RastreioOut, LaudoCreate, LaudoOut, IndicadorDashboardCreate,
     IndicadorDashboardOut
 )
 
@@ -98,6 +98,26 @@ def obter_empresa(empresa_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
     return empresa
 
+# --- NOVO MÉTODO DELETE ADICIONADO AQUI ---
+@app.delete("/empresas/{empresa_id}")
+def deletar_empresa(empresa_id: int, db: Session = Depends(get_db)):
+    """
+    Deleta uma empresa e todos os usuários associados a ela.
+    """
+    empresa = db.query(Empresa).filter(Empresa.id == empresa_id).first()
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
+    # Deleta usuários associados à empresa primeiro para evitar violação de chave estrangeira
+    db.query(Usuario).filter(Usuario.empresa == empresa_id).delete()
+    
+    # Agora deleta a empresa
+    db.delete(empresa)
+    
+    db.commit()
+    return {"detail": "Empresa e usuários associados deletados com sucesso"}
+
+
 # --- Predição ---
 
 @app.post("/prever_dosagem")
@@ -117,17 +137,7 @@ def listar_producoes(empresa_id: int, db: Session = Depends(get_db)):
     """Lista todas as produções de uma empresa específica."""
     return db.query(Producao).filter(Producao.empresa == empresa_id).all()
 
-#@app.post("/producao", response_model=ProducaoOut)
-#def criar_producao(producao: ProducaoCreate, db: Session = Depends(get_db)):
-#    db_producao = Producao(**producao.dict())
-#    db.add(db_producao)
-#    db.commit()
-#    db.refresh(db_producao)
-#    return db_producao
 
-# --- 3. MODIFIQUE A ROTA DE CRIAÇÃO DE PRODUÇÃO ---
-
-# Encontre sua função @app.post("/producao") e a substitua por esta
 @app.post("/producao", response_model=ProducaoOut)
 def criar_producao(producao: ProducaoCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
@@ -138,11 +148,11 @@ def criar_producao(producao: ProducaoCreate, background_tasks: BackgroundTasks, 
     db.add(db_producao)
     db.commit()
     db.refresh(db_producao)
-    
+
     # Se a produção for criada com o status "Produzir", adiciona a tarefa de simulação
     if producao.status == 'Produzir':
         background_tasks.add_task(iniciar_simulacao_dosagem, db_producao.id)
-        
+
     return db_producao
 
 @app.get("/producao/soma_volume_a_produzir", response_model=float)
@@ -199,10 +209,10 @@ async def criar_sensores(
         file_extension = imagem.filename.split('.')[-1]
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
         file_path = f"static/sensor_images/{unique_filename}"
-        
+
         with open(file_path, "wb") as buffer:
             buffer.write(await imagem.read())
-        
+
         imagem_url = f"/{file_path}"
 
     db_sensor = Sensor(
@@ -234,7 +244,7 @@ async def atualizar_sensor(
     db_sensor = db.query(Sensor).filter(Sensor.id == sensor_id).first()
     if not db_sensor:
         raise HTTPException(status_code=404, detail="Sensor não encontrado")
-    
+
     # Opcional: Validar se o sensor pertence à empresa que está editando
     if db_sensor.empresa != empresa:
         raise HTTPException(status_code=403, detail="Acesso não autorizado para editar este sensor")
@@ -251,15 +261,15 @@ async def atualizar_sensor(
             old_image_path = db_sensor.imagem_url.lstrip('/')
             if os.path.exists(old_image_path):
                 os.remove(old_image_path)
-        
+
         # Salva a nova imagem
         file_extension = imagem.filename.split('.')[-1]
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
         file_path = f"static/sensor_images/{unique_filename}"
-        
+
         with open(file_path, "wb") as buffer:
             buffer.write(await imagem.read())
-        
+
         db_sensor.imagem_url = f"/{file_path}"
 
     db.commit()
@@ -296,14 +306,6 @@ def listar_laudos(empresa_id: int, producao_id: Optional[int] = None, db: Sessio
     if producao_id:
         query = query.filter(Laudo.producao_id == producao_id)
     return query.order_by(Laudo.data_criacao.desc()).all()
-#
-#@app.post("/laudos", response_model=LaudoOut)
-#def criar_laudo(laudo: LaudoCreate, db: Session = Depends(get_db)):
-#    db_laudo = Laudo(**laudo.dict())
-#    db.add(db_laudo)
-#    db.commit()
-#    db.refresh(db_laudo)
-#    return db_laudo
 
 
 @app.post("/laudos", response_model=LaudoOut)
@@ -331,20 +333,14 @@ def criar_laudo(laudo: LaudoCreate, db: Session = Depends(get_db)):
                 db_producao.laudo = 'Conforme'
             elif laudo.tipo == 'Reprovado':
                 db_producao.laudo = 'Rejeitado'
-            
+
     # 3. Salva todas as alterações (o novo laudo e a atualização da produção)
     db.commit()
-    
+
     # 4. Atualiza o objeto do laudo com os dados do banco
     db.refresh(db_laudo)
-    
+
     return db_laudo
-
-
-
-
-
-
 
 @app.get("/laudos/{laudo_id}", response_model=LaudoOut)
 def obter_laudo(laudo_id: int, empresa_id: int, db: Session = Depends(get_db)):
@@ -376,7 +372,7 @@ def salvar_dados_grafico(
     for key, value in update_data.items():
         if hasattr(db_indicador, key) and value is not None:
             setattr(db_indicador, key, value)
-    
+
     if db_indicador.disponibilidade is not None and db_indicador.performance is not None and db_indicador.qualidade is not None:
         db_indicador.oee = (db_indicador.disponibilidade / 100) * (db_indicador.performance / 100) * (db_indicador.qualidade / 100) * 100
 
@@ -385,7 +381,7 @@ def salvar_dados_grafico(
 
     if db_indicador.producao_real is not None and db_indicador.horas_trabalhadas is not None and db_indicador.horas_trabalhadas > 0:
         db_indicador.produtividade = db_indicador.producao_real / db_indicador.horas_trabalhadas
-    
+
     db.commit()
     db.refresh(db_indicador)
     return db_indicador
@@ -429,7 +425,7 @@ def obter_media_conformidade(empresa_id: int, db: Session = Depends(get_db)):
 
     # Calcula a porcentagem
     media = (total_conforme / total_concluidas) * 100
-    
+
     return round(media, 2)
 
 
@@ -441,7 +437,7 @@ def iniciar_simulacao_dosagem(producao_id: int):
     nomes dos sensores cadastrados no banco de dados para a empresa.
     """
     print(f"--- Iniciando simulação de dosagem para Produção ID: {producao_id} ---")
-    
+
     # Cria uma nova sessão de DB exclusiva para esta tarefa
     db = SessionLocal()
     try:
@@ -454,7 +450,7 @@ def iniciar_simulacao_dosagem(producao_id: int):
         # --- MUDANÇA 1: BUSCAR SENSORES REAIS DO BANCO DE DADOS ---
         # Busca os nomes dos sensores cadastrados para a empresa desta produção.
         sensores_da_empresa = db.query(Sensor.sensor).filter(Sensor.empresa == db_producao.empresa).all()
-        
+
         # Extrai os nomes da lista de tuplas retornada pela query
         lista_nomes_sensores = [s[0] for s in sensores_da_empresa]
 
@@ -463,7 +459,7 @@ def iniciar_simulacao_dosagem(producao_id: int):
             db_producao.status = 'Falhou' # Atualiza o status para indicar o erro
             db.commit()
             return
-            
+
         # Mapeia dinamicamente os sensores aos valores de Nitrogênio, Fosfato e Potássio.
         # Usa o operador de módulo (%) para evitar erros caso haja menos de 3 sensores.
         sensor_n = lista_nomes_sensores[0]
@@ -475,7 +471,7 @@ def iniciar_simulacao_dosagem(producao_id: int):
             sensor_p: db_producao.sp,      # Fosfato
             sensor_k: db_producao.sk       # Potássio
         }
-        
+
         # --- MUDANÇA 2: SIMULAÇÃO MAIS RÁPIDA E BASEADA EM PASSOS ---
         num_passos = 8 # Define um número fixo de passos para a simulação
 
@@ -492,7 +488,7 @@ def iniciar_simulacao_dosagem(producao_id: int):
             for passo in range(1, num_passos + 1):
                 # Calcula o peso atual proporcionalmente ao passo atual
                 peso_atual = (quantidade_final / num_passos) * passo
-                
+
                 # Garante que o peso não ultrapasse a meta final e arredonda
                 peso_atual = round(min(peso_atual, quantidade_final), 2)
 
@@ -507,23 +503,23 @@ def iniciar_simulacao_dosagem(producao_id: int):
                     "status": "Dosando",
                     "empresa": db_producao.empresa
                 }
-                
+
                 # Cria e salva o registro de rastreio diretamente no banco
                 novo_rastreio = Rastreio(**payload_rastreio)
                 db.add(novo_rastreio)
                 db.commit()
-                
+
                 print(f"[{sensor_nome}] Passo {passo}/{num_passos} - Peso atual: {peso_atual:.2f}g")
 
                 # Pausa menor para uma simulação mais rápida
                 time.sleep(0.2) # <-- Reduzido de 1s para 0.2s
 
             print(f"[{sensor_nome}] Dosagem finalizada.")
-        
+
         # Ao final de todas as dosagens, atualiza o status da produção
         db_producao.status = 'Em Análise' # Próxima etapa do processo
         db.commit()
-        
+
         print(f"--- Simulação finalizada. Produção ID {producao_id} atualizada para 'Em Análise' ---")
 
     except Exception as e:
