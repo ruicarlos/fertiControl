@@ -64,6 +64,8 @@ class Sensor(Base):
     sensor = Column(String(25), nullable=False)
     device = Column(String(25), nullable=False)
     status = Column(String(10), nullable=False)
+    porta = Column(String(10), nullable=False)
+    ip = Column(String(25), nullable=False)
     imagem_url = Column(String(512), nullable=True) # <-- NOVO CAMPO
     empresa = Column(Integer, ForeignKey("empresas.id"))
 

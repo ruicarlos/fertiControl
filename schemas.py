@@ -120,6 +120,8 @@ class SensorBase(BaseModel):
     sensor: str
     device: str
     status: str
+    ip: str
+    porta: str
     imagem_url: Optional[str] = None # <-- NOVO CAMPO
     empresa: int
 
