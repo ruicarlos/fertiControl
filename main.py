@@ -33,6 +33,7 @@ app = FastAPI(title="API de Validação FertiControl IA - Deway")
 # --- Configuração de CORS e Arquivos Estáticos ---
  origins = [
      "https://ferticontrol-web.vercel.app", 
+     "https://fertcontrol-web.vercel.app/login", 
      "http://localhost:8080",              
  ]
 
