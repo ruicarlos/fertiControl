@@ -32,9 +32,16 @@ app = FastAPI(title="API de Validação FertiControl IA - Deway")
 
 # --- Configuração de CORS e Arquivos Estáticos ---
 
+# Lista de origens permitidas
+origins = [
+    "https://ferticontrol-web.vercel.app",  # Seu frontend em produção
+    "http://localhost:8080",               # Seu frontend em desenvolvimento (se usar essa porta)
+    # Adicione aqui outras URLs de frontend se precisar (ex: http://localhost:5173)
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,    # <-- MUDANÇA PRINCIPAL AQUI
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
