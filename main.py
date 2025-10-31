@@ -203,6 +203,8 @@ async def criar_sensores(
     device: str = Form(...),
     status: str = Form(...),
     empresa: int = Form(...),
+    ip: Optional[str] = Form(None),      
+    porta: Optional[str] = Form(None), 
     imagem: Optional[UploadFile] = File(None)
 ):
     imagem_url = None
@@ -221,6 +223,8 @@ async def criar_sensores(
         device=device,
         status=status,
         empresa=empresa,
+        ip=ip,                  
+        porta=porta,           
         imagem_url=imagem_url
     )
     db.add(db_sensor)
@@ -236,7 +240,9 @@ async def atualizar_sensor(
     sensor: str = Form(...),
     device: str = Form(...),
     status: str = Form(...),
-    empresa: int = Form(...), # Adicionado para validação
+    empresa: int = Form(...), 
+    ip: Optional[str] = Form(None),       
+    porta: Optional[str] = Form(None),   
     imagem: Optional[UploadFile] = File(None)
 ):
     """
@@ -254,6 +260,8 @@ async def atualizar_sensor(
     db_sensor.sensor = sensor
     db_sensor.device = device
     db_sensor.status = status
+    db_sensor.ip = ip             
+    db_sensor.porta = porta       
 
     # Se uma nova imagem foi enviada, atualiza
     if imagem:
