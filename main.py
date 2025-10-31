@@ -39,8 +39,8 @@ app = FastAPI(title="API de Validação FertiControl IA - Deway")
 
 app.add_middleware(
     CORSMiddleware,
-   # allow_origins=["*"],
-    allow_origins=origins, 
+    allow_origins=["*"],
+   # allow_origins=origins, // não utilizado 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
