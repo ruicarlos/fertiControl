@@ -30,17 +30,12 @@ modelo = joblib.load("modelo_dosagem.pkl")
 # Define o app
 app = FastAPI(title="API de Validação FertiControl IA - Deway")
 
-# --- Configuração de CORS e Arquivos Estáticos ---
- origins = [
-     "https://ferticontrol-web.vercel.app", 
-     "https://fertcontrol-web.vercel.app/login", 
-     "http://localhost:8080",              
- ]
+regex_origens_permitidas = r"^https?:\/\/((localhost(:\d+)?)|(ferticontrol-web\.vercel\.app)).*" # adicionado
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-   # allow_origins=origins, // não utilizado 
+     allow_origin_regex=regex_origens_permitidas,  # adicionado
+   # allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
